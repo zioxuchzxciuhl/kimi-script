@@ -1,24 +1,43 @@
 -- loader.lua
 -- Loads the protected (sensitive) module first, then the main UI.
--- This is the ONLY file you need to run in your executor.
---
--- Recommended obfuscation strategy:
---   loader.lua     -> PolSec (medium) - this is the file you actually run
---   protected.lua  -> leave plain on GitHub
---   use_kimi.txt   -> leave plain on GitHub (NO VM obfuscation) for FPS
+-- Run THIS file through PolSec, then paste the output into your executor.
 
-local function loadUrl(url)
-    local success, content = pcall(function()
+local function fetch(url)
+    if typeof(request) == "function" then
+        local ok, res = pcall(function()
+            return request({
+                Url = url,
+                Method = "GET",
+                Headers = {
+                    ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                }
+            })
+        end)
+        if ok and res and res.StatusCode == 200 and type(res.Body) == "string" and #res.Body > 0 then
+            return res.Body
+        end
+    end
+
+    local ok, content = pcall(function()
         return game:HttpGet(url, true)
     end)
-    if not success or not content then
-        warn("Failed to download " .. url .. ": " .. tostring(content))
+    if ok and type(content) == "string" and #content > 0 then
+        return content
+    end
+
+    return nil, tostring(content or "empty response")
+end
+
+local function loadUrl(url)
+    local content, err = fetch(url)
+    if not content then
+        warn("Failed to download " .. url .. ": " .. tostring(err))
         return
     end
 
-    local chunk, err = loadstring(content)
+    local chunk, loadErr = loadstring(content)
     if not chunk then
-        warn("Invalid Lua from " .. url .. ": " .. tostring(err))
+        warn("Invalid Lua from " .. url .. ": " .. tostring(loadErr))
         warn("Content preview: " .. string.sub(content, 1, 300))
         return
     end
@@ -30,29 +49,26 @@ local function loadUrl(url)
 end
 
 local function loadFile(path)
-    local success, content = pcall(function()
+    local ok, content = pcall(function()
         return readfile(path)
     end)
-    if not success or not content then
+    if not ok or not content then
         warn("Failed to read " .. path .. ": " .. tostring(content))
         return
     end
 
-    local chunk, err = loadstring(content)
+    local chunk, loadErr = loadstring(content)
     if not chunk then
-        warn("Invalid Lua from " .. path .. ": " .. tostring(err))
+        warn("Invalid Lua from " .. path .. ": " .. tostring(loadErr))
         return
     end
 
-    local ok, runErr = pcall(chunk, path)
-    if not ok then
+    local runOk, runErr = pcall(chunk, path)
+    if not runErr then
         warn("Failed to execute " .. path .. ": " .. tostring(runErr))
     end
 end
 
--- === CONFIG ===
--- Set USE_LOCAL to true if you want to test from your executor's workspace folder.
--- Set it to false (or nil) to load from GitHub raw URLs.
 local USE_LOCAL = false
 
 local PROTECTED_URL = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/protected.lua"
@@ -61,7 +77,6 @@ local UI_URL        = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-scr
 local PROTECTED_PATH = "C:/Users/Adkin/Downloads/advanced/protected.lua"
 local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use_kimi.txt"
 
--- Load protected FIRST so getgenv().ForceHit and getgenv().AnimGodmode exist before the UI sets up toggles.
 if USE_LOCAL then
     loadFile(PROTECTED_PATH)
     loadFile(UI_PATH)
