@@ -5,19 +5,27 @@
 -- Recommended obfuscation strategy:
 --   loader.lua     -> PolSec (medium) - this is the file you actually run
 --   protected.lua  -> leave plain on GitHub
---   use kimi.txt   -> leave plain on GitHub (NO VM obfuscation) for FPS
+--   use_kimi.txt   -> leave plain on GitHub (NO VM obfuscation) for FPS
 
 local function loadUrl(url)
     local success, content = pcall(function()
         return game:HttpGet(url, true)
     end)
-    if success and content then
-        local ok, err = pcall(loadstring(content), url)
-        if not ok then
-            warn("Failed to execute " .. url .. ": " .. tostring(err))
-        end
-    else
+    if not success or not content then
         warn("Failed to download " .. url .. ": " .. tostring(content))
+        return
+    end
+
+    local chunk, err = loadstring(content)
+    if not chunk then
+        warn("Invalid Lua from " .. url .. ": " .. tostring(err))
+        warn("Content preview: " .. string.sub(content, 1, 300))
+        return
+    end
+
+    local ok, runErr = pcall(chunk, url)
+    if not ok then
+        warn("Failed to execute " .. url .. ": " .. tostring(runErr))
     end
 end
 
@@ -25,13 +33,20 @@ local function loadFile(path)
     local success, content = pcall(function()
         return readfile(path)
     end)
-    if success and content then
-        local ok, err = pcall(loadstring(content), path)
-        if not ok then
-            warn("Failed to execute " .. path .. ": " .. tostring(err))
-        end
-    else
+    if not success or not content then
         warn("Failed to read " .. path .. ": " .. tostring(content))
+        return
+    end
+
+    local chunk, err = loadstring(content)
+    if not chunk then
+        warn("Invalid Lua from " .. path .. ": " .. tostring(err))
+        return
+    end
+
+    local ok, runErr = pcall(chunk, path)
+    if not ok then
+        warn("Failed to execute " .. path .. ": " .. tostring(runErr))
     end
 end
 
@@ -41,10 +56,10 @@ end
 local USE_LOCAL = false
 
 local PROTECTED_URL = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/protected.lua"
-local UI_URL        = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/use%20kimi.txt"
+local UI_URL        = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/use_kimi.txt"
 
 local PROTECTED_PATH = "C:/Users/Adkin/Downloads/advanced/protected.lua"
-local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use kimi.txt"
+local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use_kimi.txt"
 
 -- Load protected FIRST so getgenv().ForceHit and getgenv().AnimGodmode exist before the UI sets up toggles.
 if USE_LOCAL then
