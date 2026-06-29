@@ -1,5 +1,5 @@
 -- loader.lua
--- Loads the protected module first, then the main UI.
+-- Loads protected.lua, then esp.lua, then the main UI.
 -- Run THIS file through PolSec, then paste the output into your executor.
 
 local function fetch(url)
@@ -66,15 +66,19 @@ end
 local USE_LOCAL = false
 
 local PROTECTED_URL = "https://cdn.jsdelivr.net/gh/zioxuchzxciuhl/kimi-script@main/protected.lua"
+local ESP_URL       = "https://cdn.jsdelivr.net/gh/zioxuchzxciuhl/kimi-script@main/esp.lua"
 local UI_URL        = "https://cdn.jsdelivr.net/gh/zioxuchzxciuhl/kimi-script@main/use_kimi.txt"
 
 local PROTECTED_PATH = "C:/Users/Adkin/Downloads/advanced/protected.lua"
+local ESP_PATH       = "C:/Users/Adkin/Downloads/advanced/esp.lua"
 local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use_kimi.txt"
 
 if USE_LOCAL then
     loadFile(PROTECTED_PATH)
+    loadFile(ESP_PATH)
     loadFile(UI_PATH)
 else
     loadUrl(PROTECTED_URL)
+    loadUrl(ESP_URL)
     loadUrl(UI_URL)
 end
