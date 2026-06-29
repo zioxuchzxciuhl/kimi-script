@@ -33,13 +33,15 @@ local function fetch(url)
             end
         end
 
-        local ok, content = pcall(function()
-            return game:HttpGet(url, true)
-        end)
-        if ok and type(content) == "string" and #content > 0 then
-            return content
-        elseif not ok then
-            dbg("HttpGet error: " .. tostring(content))
+        for _, cache in ipairs({false, true}) do
+            local ok, content = pcall(function()
+                return game:HttpGet(url, cache)
+            end)
+            if ok and type(content) == "string" and #content > 0 then
+                return content
+            elseif not ok then
+                dbg("HttpGet error (cache=" .. tostring(cache) .. "): " .. tostring(content))
+            end
         end
 
         if i < 3 then
@@ -56,9 +58,14 @@ local function loadUrl(url)
         return
     end
 
+    -- strip UTF-8 BOM if present
+    if content:sub(1, 3) == "\239\187\191" then
+        content = content:sub(4)
+    end
+
     local chunk, loadErr = loadstring(content)
     if not chunk then
-        warn("[loader] invalid lua received")
+        warn("[loader] invalid lua received | len=" .. tostring(#content) .. " | first=[" .. content:sub(1, 80):gsub("\n", "\\n") .. "] | last=[" .. content:sub(-80):gsub("\n", "\\n") .. "] | err=" .. tostring(loadErr))
         return
     end
 
