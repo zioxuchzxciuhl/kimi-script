@@ -65,8 +65,8 @@ end
 
 local USE_LOCAL = false
 
-local PROTECTED_URL = "https://cdn.jsdelivr.net/gh/zioxuchzxciuhl/kimi-script@main/protected.lua"
-local UI_URL        = "https://cdn.jsdelivr.net/gh/zioxuchzxciuhl/kimi-script@main/use_kimi.txt"
+local PROTECTED_URL = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/protected.lua"
+local UI_URL        = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/use_kimi.txt"
 
 local PROTECTED_PATH = "C:/Users/Adkin/Downloads/advanced/protected.lua"
 local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use_kimi.txt"
