@@ -40,8 +40,8 @@ end
 -- Set it to false (or nil) to load from GitHub raw URLs.
 local USE_LOCAL = false
 
-local PROTECTED_URL = "https://raw.githubusercontent.com/YOURNAME/YOURREPO/main/protected.lua"
-local UI_URL        = "https://raw.githubusercontent.com/YOURNAME/YOURREPO/main/use%20kimi.txt"
+local PROTECTED_URL = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/protected.lua"
+local UI_URL        = "https://raw.githubusercontent.com/zioxuchzxciuhl/kimi-script/refs/heads/main/use%20kimi.txt"
 
 local PROTECTED_PATH = "C:/Users/Adkin/Downloads/advanced/protected.lua"
 local UI_PATH        = "C:/Users/Adkin/Downloads/advanced/use kimi.txt"
