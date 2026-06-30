@@ -1389,11 +1389,11 @@ function AutoKill.ApplyBodyColorsToClone(char)
     local bc = char:FindFirstChild("Body Colors")
     if not bc then return end
     local colorMap = {
-        Head = bc.HeadColor, Torso = bc.TorsoColor, UpperTorso = bc.TorsoColor, LowerTorso = bc.TorsoColor,
-        LeftArm = bc.LeftArmColor, LeftUpperArm = bc.LeftArmColor, LeftLowerArm = bc.LeftArmColor, LeftHand = bc.LeftArmColor,
-        RightArm = bc.RightArmColor, RightUpperArm = bc.RightArmColor, RightLowerArm = bc.RightArmColor, RightHand = bc.RightArmColor,
-        LeftLeg = bc.LeftLegColor, LeftUpperLeg = bc.LeftLegColor, LeftLowerLeg = bc.LeftLegColor, LeftFoot = bc.LeftLegColor,
-        RightLeg = bc.RightLegColor, RightUpperLeg = bc.RightLegColor, RightLowerLeg = bc.RightLegColor, RightFoot = bc.RightLegColor,
+        Head = bc.HeadColor.Color, Torso = bc.TorsoColor.Color, UpperTorso = bc.TorsoColor.Color, LowerTorso = bc.TorsoColor.Color,
+        LeftArm = bc.LeftArmColor.Color, LeftUpperArm = bc.LeftArmColor.Color, LeftLowerArm = bc.LeftArmColor.Color, LeftHand = bc.LeftArmColor.Color,
+        RightArm = bc.RightArmColor.Color, RightUpperArm = bc.RightArmColor.Color, RightLowerArm = bc.RightArmColor.Color, RightHand = bc.RightArmColor.Color,
+        LeftLeg = bc.LeftLegColor.Color, LeftUpperLeg = bc.LeftLegColor.Color, LeftLowerLeg = bc.LeftLegColor.Color, LeftFoot = bc.LeftLegColor.Color,
+        RightLeg = bc.RightLegColor.Color, RightUpperLeg = bc.RightLegColor.Color, RightLowerLeg = bc.RightLegColor.Color, RightFoot = bc.RightLegColor.Color,
     }
     for name, color in pairs(colorMap) do
         local part = char:FindFirstChild(name)
