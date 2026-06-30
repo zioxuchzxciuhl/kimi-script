@@ -1103,13 +1103,22 @@ function AutoKill.KnifeAuraStep()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return end
 
-    -- Pick and lock the Lock onto a target until they die/get downed so the UI doesn't flicker between nearby players
-    local target = AutoKill.AuraLockedTarget
+    -- Respect manual target list first, then lock nearest by distance
+    local target = AutoKill.Target
     if target and (not AutoKill.IsValidTarget(target) or AutoKill.GetTargetStatus(target) ~= "alive") then
         target = nil
-        AutoKill.AuraLockedTarget = nil
+    end
+    if not target and AutoKill.HasSelectedTargets() then
+        target = AutoKill.GetNextValidTarget()
     end
     if not target then
+        target = AutoKill.AuraLockedTarget
+        if target and (not AutoKill.IsValidTarget(target) or AutoKill.GetTargetStatus(target) ~= "alive") then
+            target = nil
+            AutoKill.AuraLockedTarget = nil
+        end
+    end
+    if not target and not AutoKill.HasSelectedTargets() then
         target = AutoKill.GetNearestTargetByDistance()
         AutoKill.AuraLockedTarget = target
     end
@@ -1140,20 +1149,6 @@ function AutoKill.KnifeAuraStep()
         local can2 = scriptObj:FindFirstChild("CanHitPlayer2")
         if can1 then pcall(function() can1.Value = targetChar end) end
         if can2 then pcall(function() can2.Value = targetChar end) end
-    end
-
-    local handle = knifeTool:FindFirstChild("Handle")
-    local hitbox = handle and handle:FindFirstChild("HITBOX_PART")
-    if hitbox then
-        pcall(function()
-            local sz = math.max(AutoKill.KnifeExpander.Enabled and AutoKill.KnifeExpander.Size or 60, 60)
-            hitbox.Transparency = 1
-            hitbox.CanCollide = false
-            hitbox.Massless = true
-            -- Pulse the hitbox so the .Touched event refires for targets already inside the aura
-            hitbox.Size = Vector3.new(1, 1, 1)
-            hitbox.Size = Vector3.new(sz, sz, sz)
-        end)
     end
 
     AutoKill.TryStab()
@@ -1257,10 +1252,18 @@ RunService.Heartbeat:Connect(function()
             if AutoKill.KnifeAura then
                 sz = math.max(sz, 60)
             end
-            hitbox.Size = Vector3.new(sz, sz, sz)
             hitbox.Transparency = 1
             hitbox.CanCollide = false
             hitbox.Massless = true
+            -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
+            if AutoKill.KnifeAura then
+                hitbox.Size = Vector3.new(1, 1, 1)
+                task.defer(function()
+                    hitbox.Size = Vector3.new(sz, sz, sz)
+                end)
+            else
+                hitbox.Size = Vector3.new(sz, sz, sz)
+            end
         end)
     end
 end)
