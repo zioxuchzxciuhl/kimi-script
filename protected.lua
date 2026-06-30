@@ -1,6 +1,7 @@
 -- protected.lua
 -- Sensitive exploit logic. Obfuscate THIS file with PolSec.
 -- Load this BEFORE the main UI script via loader.lua.
+print("ll")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -469,13 +470,7 @@ local AnimGodmode = {
     FreezeTime = 0.1265,
     Track = nil,
     Heartbeat = nil,
-    Connection = nil,
-    CloneModel = nil,
-    CloneConnection = nil,
-    OriginalTransparencies = {},
-    OriginalGuiStates = {},
-    IdleAnimId = "rbxassetid://507766666",
-    WalkAnimId = "rbxassetid://507777623"
+    Connection = nil
 }
 
 local function cleanupAnimGodmode()
@@ -492,36 +487,6 @@ local function cleanupAnimGodmode()
         AnimGodmode.Connection:Disconnect()
         AnimGodmode.Connection = nil
     end
-    if AnimGodmode.CloneConnection then
-        AnimGodmode.CloneConnection:Disconnect()
-        AnimGodmode.CloneConnection = nil
-    end
-    if AnimGodmode.CloneModel then
-        pcall(function()
-            AnimGodmode.CloneModel:Destroy()
-        end)
-        AnimGodmode.CloneModel = nil
-    end
-
-    -- Restore real character visibility
-    for part, data in pairs(AnimGodmode.OriginalTransparencies) do
-        if part and part.Parent then
-            pcall(function()
-                part.Transparency = data.Transparency
-                part.LocalTransparencyModifier = data.LocalTransparencyModifier
-            end)
-        end
-    end
-    AnimGodmode.OriginalTransparencies = {}
-
-    for gui, state in pairs(AnimGodmode.OriginalGuiStates) do
-        if gui and gui.Parent then
-            pcall(function()
-                gui.Enabled = state
-            end)
-        end
-    end
-    AnimGodmode.OriginalGuiStates = {}
 end
 
 local function getGodmodeHumanoid()
@@ -532,224 +497,16 @@ local function getGodmodeHumanoid()
     return char:WaitForChild("Humanoid")
 end
 
-local function storeRealCharVisuals(char)
-    AnimGodmode.OriginalTransparencies = {}
-    AnimGodmode.OriginalGuiStates = {}
-    if not char then return end
-
-    for _, obj in ipairs(char:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            AnimGodmode.OriginalTransparencies[obj] = {
-                Transparency = obj.Transparency,
-                LocalTransparencyModifier = obj.LocalTransparencyModifier
-            }
-        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
-            AnimGodmode.OriginalGuiStates[obj] = obj.Enabled
-        end
-    end
-end
-
-local function hideRealCharacter(char)
-    if not char then return end
-    for _, obj in ipairs(char:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            obj.Transparency = 1
-            obj.LocalTransparencyModifier = 0
-        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
-            obj.Enabled = false
-        end
-    end
-end
-
-local function applyBodyColorsAndFixMaterials(char)
-    -- BodyColors/clothing only applies automatically to characters in Workspace.
-    -- When parented to CurrentCamera we must color the limbs ourselves.
-    local bc = char:FindFirstChild("Body Colors")
-    if not bc then return end
-
-    local colorMap = {
-        Head = bc.HeadColor,
-        Torso = bc.TorsoColor,
-        UpperTorso = bc.TorsoColor,
-        LowerTorso = bc.TorsoColor,
-        LeftArm = bc.LeftArmColor,
-        LeftUpperArm = bc.LeftArmColor,
-        LeftLowerArm = bc.LeftArmColor,
-        LeftHand = bc.LeftArmColor,
-        RightArm = bc.RightArmColor,
-        RightUpperArm = bc.RightArmColor,
-        RightLowerArm = bc.RightArmColor,
-        RightHand = bc.RightArmColor,
-        LeftLeg = bc.LeftLegColor,
-        LeftUpperLeg = bc.LeftLegColor,
-        LeftLowerLeg = bc.LeftLegColor,
-        LeftFoot = bc.LeftLegColor,
-        RightLeg = bc.RightLegColor,
-        RightUpperLeg = bc.RightLegColor,
-        RightLowerLeg = bc.RightLegColor,
-        RightFoot = bc.RightLegColor,
-    }
-
-    for name, color in pairs(colorMap) do
-        local part = char:FindFirstChild(name)
-        if part and part:IsA("BasePart") then
-            part.Color = color
-            part.Material = Enum.Material.Plastic
-        end
-    end
-end
-
-local function createLocalClone(realChar)
-    if not realChar then return end
-
-    -- Clean up any previous clone/restore
-    cleanupAnimGodmode()
-
-    -- Remember how the real character looked so we can restore it later
-    storeRealCharVisuals(realChar)
-
-    -- Temporarily allow cloning
-    local oldArchivable = realChar.Archivable
-    realChar.Archivable = true
-    local clone = realChar:Clone()
-    realChar.Archivable = oldArchivable
-    if not clone then return end
-    clone.Name = "AnimGodmode_LocalClone"
-
-    -- Strip scripts, tools, name tags, and leftover UI parts from the clone
-    for _, obj in ipairs(clone:GetDescendants()) do
-        if obj:IsA("Script") or obj:IsA("LocalScript") then
-            obj:Destroy()
-        elseif obj:IsA("Tool") then
-            obj:Destroy()
-        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
-            obj.Enabled = false
-        elseif obj:IsA("BasePart") and obj.Name == "BUBBLE_CHAT_PART" then
-            obj:Destroy()
-        end
-    end
-
-    -- Make clone visible and physics-free
-    local cloneRoot = clone:FindFirstChild("HumanoidRootPart")
-    for _, obj in ipairs(clone:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            obj.CanCollide = false
-            obj.Massless = true
-            obj.Transparency = 0
-            obj.LocalTransparencyModifier = 0
-        elseif obj:IsA("Motor6D") then
-            obj.Transform = CFrame.new()
-        end
-    end
-    if cloneRoot then
-        cloneRoot.Anchored = true
-        cloneRoot.CanCollide = false
-        cloneRoot.Massless = true
-    end
-
-    -- Apply proper body colors/materials so it doesn't glow neon-white
-    applyBodyColorsAndFixMaterials(clone)
-
-    -- Configure clone humanoid
-    local cloneHum = clone:FindFirstChildOfClass("Humanoid")
-    if cloneHum then
-        cloneHum.AutoRotate = false
-        pcall(function()
-            cloneHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-        end)
-        cloneHum.DisplayName = ""
-    end
-
-    -- Parent clone to CurrentCamera so it is only visible locally
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-    clone.Parent = camera
-    AnimGodmode.CloneModel = clone
-
-    -- Hide the real character locally (server/other players still see it normally)
-    hideRealCharacter(realChar)
-
-    -- Load idle/walk animations using the player's actual animation IDs
-    local function getAnimId(animateObj, stateName)
-        if not animateObj then return nil end
-        local state = animateObj:FindFirstChild(stateName)
-        if not state then return nil end
-        local anim = state:FindFirstChildOfClass("Animation")
-        return anim and anim.AnimationId or nil
-    end
-    local realAnimate = realChar:FindFirstChild("Animate")
-    local idleId = getAnimId(realAnimate, "idle") or AnimGodmode.IdleAnimId
-    local walkId = getAnimId(realAnimate, "walk") or AnimGodmode.WalkAnimId
-
-    local animator = cloneHum and cloneHum:FindFirstChildOfClass("Animator")
-    if not animator or idleId == "" then return end
-
-    local idleAnim = Instance.new("Animation")
-    idleAnim.AnimationId = idleId
-    local walkAnim = Instance.new("Animation")
-    walkAnim.AnimationId = walkId
-
-    local idleTrack, walkTrack
-    pcall(function()
-        idleTrack = animator:LoadAnimation(idleAnim)
-        walkTrack = animator:LoadAnimation(walkAnim)
-    end)
-
-    if idleTrack then
-        idleTrack.Priority = Enum.AnimationPriority.Movement
-        idleTrack.Looped = true
-        idleTrack:Play(0.1, 1, 1)
-    end
-
-    AnimGodmode.CloneConnection = RunService.RenderStepped:Connect(function()
-        if not AnimGodmode.Enabled or not AnimGodmode.CloneModel then
-            cleanupAnimGodmode()
-            return
-        end
-        local currentChar = LocalPlayer.Character
-        if not currentChar or currentChar ~= realChar then
-            cleanupAnimGodmode()
-            return
-        end
-
-        local realRoot = currentChar:FindFirstChild("HumanoidRootPart")
-        local cRoot = AnimGodmode.CloneModel:FindFirstChild("HumanoidRootPart")
-        if not realRoot or not cRoot then return end
-
-        -- Keep clone exactly on top of the real character
-        cRoot.CFrame = realRoot.CFrame
-
-        -- Make sure the real character stays hidden
-        hideRealCharacter(currentChar)
-
-        -- Choose idle or walk based on the real humanoid's input
-        local realHum = currentChar:FindFirstChildOfClass("Humanoid")
-        if realHum and idleTrack and walkTrack then
-            local isMoving = realHum.MoveDirection.Magnitude > 0.05
-            if isMoving then
-                if not walkTrack.IsPlaying then
-                    idleTrack:Stop(0.1)
-                    walkTrack:Play(0.1, 1, math.max(0.1, realHum.WalkSpeed / 16))
-                end
-                walkTrack:AdjustSpeed(math.max(0.1, realHum.WalkSpeed / 16))
-            else
-                if not idleTrack.IsPlaying then
-                    walkTrack:Stop(0.1)
-                    idleTrack:Play(0.1, 1, 1)
-                end
-            end
-        end
-    end)
-end
-
 local function playFrozenEmote()
     if not AnimGodmode.Enabled then return end
     cleanupAnimGodmode()
     local hum = getGodmodeHumanoid()
-    local char = LocalPlayer.Character
     local anim = Instance.new("Animation")
     anim.AnimationId = AnimGodmode.EmoteId
     AnimGodmode.Track = hum:LoadAnimation(anim)
+    -- Core priority + weight 1: the track is active and replicates server-side,
+    -- but default idle/walk animations (Movement priority) override it locally.
+    AnimGodmode.Track.Priority = Enum.AnimationPriority.Core
     AnimGodmode.Track:Play(0, 1, 1)
     AnimGodmode.Heartbeat = RunService.Heartbeat:Connect(function()
         if AnimGodmode.Track and AnimGodmode.Enabled then
@@ -762,9 +519,6 @@ local function playFrozenEmote()
             task.delay(0.02 + math.random() * 0.03, playFrozenEmote)
         end
     end)
-    if char then
-        createLocalClone(char)
-    end
 end
 
 function AnimGodmode.Enable()
