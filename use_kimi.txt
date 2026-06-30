@@ -984,6 +984,15 @@ local AutoKill = {
     UI = nil,
     ForceHitWasEnabled = false,
     ForceHitOriginal = nil,
+    SpoofClone = {
+        Model = nil,
+        Connection = nil,
+        RealChar = nil,
+        OriginalCameraSubject = nil,
+        LastUpdate = 0,
+        Keys = {W = false, A = false, S = false, D = false, Space = false},
+    },
+    SpoofInputInitialized = false,
 }
 
 function AutoKill.CreateUI()
@@ -1197,6 +1206,11 @@ function AutoKill.KnifeAttackStep(target)
         end
     end
 
+    -- Spoof the local view with a clone so the player doesn't see the teleport.
+    if not AutoKill.SpoofClone.Model or AutoKill.SpoofClone.RealChar ~= char then
+        AutoKill.CreateSpoofClone(char)
+    end
+
     pcall(function()
         sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
         local offset, lookAt = AutoKill.GetAttachOffset()
@@ -1337,50 +1351,205 @@ function AutoKill.RemoveVoidPlatform()
 end
 
 function AutoKill.HideCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    AutoKill.CreateVoidPlatform()
-    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
-    root.CFrame = CFrame.new(platformPos)
-    root.Velocity = Vector3.new(0, 0, 0)
-    root.RotVelocity = Vector3.new(0, 0, 0)
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            if part:GetAttribute("AutoKill_OriginalLTM") == nil then
-                part:SetAttribute("AutoKill_OriginalLTM", part.LocalTransparencyModifier)
-            end
-            part.LocalTransparencyModifier = 1
-        end
-    end
+    -- No-op: we use a local spoof clone instead of a void platform.
     AutoKill.GunMethod.IsHiding = true
 end
 
 function AutoKill.KeepHidden()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
-    root.CFrame = CFrame.new(platformPos)
-    root.Velocity = Vector3.new(0, 0, 0)
-    root.RotVelocity = Vector3.new(0, 0, 0)
+    -- No-op: local character stays free.
 end
 
 function AutoKill.UnhideCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            local original = part:GetAttribute("AutoKill_OriginalLTM")
-            if original ~= nil then
-                part.LocalTransparencyModifier = original
-                part:SetAttribute("AutoKill_OriginalLTM", nil)
-            end
+    AutoKill.GunMethod.IsHiding = false
+end
+
+-- Spoof clone: server sees real char at target, local player sees/controls a clone
+function AutoKill.InitSpoofInput()
+    if AutoKill.SpoofInputInitialized then return end
+    AutoKill.SpoofInputInitialized = true
+    local function setKey(code, down)
+        local keys = AutoKill.SpoofClone.Keys
+        if code == Enum.KeyCode.W then keys.W = down
+        elseif code == Enum.KeyCode.A then keys.A = down
+        elseif code == Enum.KeyCode.S then keys.S = down
+        elseif code == Enum.KeyCode.D then keys.D = down
+        elseif code == Enum.KeyCode.Space then keys.Space = down
         end
     end
-    AutoKill.GunMethod.IsHiding = false
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        setKey(input.KeyCode, true)
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        setKey(input.KeyCode, false)
+    end)
+end
+
+function AutoKill.ApplyBodyColorsToClone(char)
+    local bc = char:FindFirstChild("Body Colors")
+    if not bc then return end
+    local colorMap = {
+        Head = bc.HeadColor, Torso = bc.TorsoColor, UpperTorso = bc.TorsoColor, LowerTorso = bc.TorsoColor,
+        LeftArm = bc.LeftArmColor, LeftUpperArm = bc.LeftArmColor, LeftLowerArm = bc.LeftArmColor, LeftHand = bc.LeftArmColor,
+        RightArm = bc.RightArmColor, RightUpperArm = bc.RightArmColor, RightLowerArm = bc.RightArmColor, RightHand = bc.RightArmColor,
+        LeftLeg = bc.LeftLegColor, LeftUpperLeg = bc.LeftLegColor, LeftLowerLeg = bc.LeftLegColor, LeftFoot = bc.LeftLegColor,
+        RightLeg = bc.RightLegColor, RightUpperLeg = bc.RightLegColor, RightLowerLeg = bc.RightLegColor, RightFoot = bc.RightLegColor,
+    }
+    for name, color in pairs(colorMap) do
+        local part = char:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            part.Color = color
+            part.Material = Enum.Material.Plastic
+        end
+    end
+end
+
+function AutoKill.CreateSpoofClone(char)
+    AutoKill.DestroySpoofClone()
+    if not char then return nil end
+    local old = char.Archivable
+    char.Archivable = true
+    local clone = char:Clone()
+    char.Archivable = old
+    if not clone then return nil end
+    clone.Name = "AutoKill_SpoofClone"
+
+    for _, obj in ipairs(clone:GetDescendants()) do
+        if obj:IsA("Script") or obj:IsA("LocalScript") then
+            obj:Destroy()
+        elseif obj:IsA("Tool") then
+            obj:Destroy()
+        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
+            obj.Enabled = false
+        elseif obj:IsA("BasePart") and obj.Name == "BUBBLE_CHAT_PART" then
+            obj:Destroy()
+        end
+    end
+
+    local cloneRoot = clone:FindFirstChild("HumanoidRootPart")
+    for _, obj in ipairs(clone:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            obj.CanCollide = false
+            obj.Massless = true
+            obj.Transparency = 0
+            obj.LocalTransparencyModifier = 0
+        elseif obj:IsA("Motor6D") then
+            obj.Transform = CFrame.new()
+        end
+    end
+    if cloneRoot then
+        cloneRoot.Anchored = true
+        cloneRoot.CanCollide = false
+        cloneRoot.Massless = true
+    end
+
+    local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+    if cloneHum then
+        cloneHum.AutoRotate = false
+        pcall(function()
+            cloneHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        end)
+        cloneHum.DisplayName = ""
+    end
+
+    AutoKill.ApplyBodyColorsToClone(clone)
+
+    local camera = workspace.CurrentCamera
+    if not camera then return nil end
+    clone.Parent = camera
+    AutoKill.SpoofClone.Model = clone
+    AutoKill.SpoofClone.RealChar = char
+    AutoKill.SpoofClone.OriginalCameraSubject = camera.CameraSubject
+    AutoKill.SpoofClone.LastUpdate = tick()
+    pcall(function()
+        camera.CameraSubject = cloneHum
+    end)
+    AutoKill.InitSpoofInput()
+
+    -- Hide the real character locally; the clone is what the player sees.
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            obj.Transparency = 1
+        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
+            obj.Enabled = false
+        end
+    end
+
+    -- Smooth clone updates on RenderStepped
+    if AutoKill.SpoofClone.Connection then
+        AutoKill.SpoofClone.Connection:Disconnect()
+    end
+    AutoKill.SpoofClone.Connection = RunService.RenderStepped:Connect(AutoKill.UpdateSpoofClone)
+
+    return clone
+end
+
+function AutoKill.UnhideRealCharacter(char)
+    if not char then return end
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            obj.Transparency = 0
+        elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
+            obj.Enabled = true
+        end
+    end
+end
+
+function AutoKill.DestroySpoofClone()
+    if AutoKill.SpoofClone.Model and AutoKill.SpoofClone.RealChar then
+        local cloneRoot = AutoKill.SpoofClone.Model:FindFirstChild("HumanoidRootPart")
+        local realRoot = AutoKill.SpoofClone.RealChar:FindFirstChild("HumanoidRootPart")
+        if cloneRoot and realRoot then
+            realRoot.CFrame = cloneRoot.CFrame
+        end
+    end
+    if AutoKill.SpoofClone.Connection then
+        AutoKill.SpoofClone.Connection:Disconnect()
+        AutoKill.SpoofClone.Connection = nil
+    end
+    if AutoKill.SpoofClone.Model then
+        pcall(function() AutoKill.SpoofClone.Model:Destroy() end)
+        AutoKill.SpoofClone.Model = nil
+    end
+    if AutoKill.SpoofClone.OriginalCameraSubject then
+        local camera = workspace.CurrentCamera
+        if camera then
+            pcall(function() camera.CameraSubject = AutoKill.SpoofClone.OriginalCameraSubject end)
+        end
+        AutoKill.SpoofClone.OriginalCameraSubject = nil
+    end
+    if AutoKill.SpoofClone.RealChar then
+        AutoKill.UnhideRealCharacter(AutoKill.SpoofClone.RealChar)
+    end
+    AutoKill.SpoofClone.RealChar = nil
+    AutoKill.SpoofClone.LastUpdate = 0
+end
+
+function AutoKill.UpdateSpoofClone()
+    local clone = AutoKill.SpoofClone.Model
+    if not clone then return end
+    local cloneRoot = clone:FindFirstChild("HumanoidRootPart")
+    if not cloneRoot then return end
+
+    local now = tick()
+    local dt = math.min(now - AutoKill.SpoofClone.LastUpdate, 0.1)
+    AutoKill.SpoofClone.LastUpdate = now
+
+    local keys = AutoKill.SpoofClone.Keys
+    local move = Vector3.zero
+    if keys.W then move = move + Vector3.new(0, 0, -1) end
+    if keys.S then move = move + Vector3.new(0, 0, 1) end
+    if keys.A then move = move + Vector3.new(-1, 0, 0) end
+    if keys.D then move = move + Vector3.new(1, 0, 0) end
+    if move.Magnitude > 0 then
+        local cam = workspace.CurrentCamera
+        local camCF = cam and cam.CFrame or cloneRoot.CFrame
+        local worldMove = camCF:VectorToWorldSpace(move.Unit)
+        worldMove = Vector3.new(worldMove.X, 0, worldMove.Z)
+        if worldMove.Magnitude > 0 then
+            cloneRoot.CFrame = CFrame.new(cloneRoot.Position + worldMove.Unit * 16 * dt)
+        end
+    end
 end
 
 function AutoKill.FastEquipDoubleBarrel()
@@ -1471,6 +1640,11 @@ function AutoKill.TeleportBehindTarget(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
     AutoKill.UnhideCharacter()
+
+    if not AutoKill.SpoofClone.Model or AutoKill.SpoofClone.RealChar ~= char then
+        AutoKill.CreateSpoofClone(char)
+    end
+
     local offset, lookAt = AutoKill.GetAttachOffset()
     if not lookAt then
         root.CFrame = targetRoot.CFrame
@@ -1503,29 +1677,25 @@ function AutoKill.AutoStomp(target)
             local dead = b and b:FindFirstChild("Dead")
 
             if not t or not ko or not ko.Value or (dead and dead.Value) then
-                if AutoKill.GunMethod.StompReturn then
-                    hrp.CFrame = AutoKill.GunMethod.StompReturn
-                end
                 break
             end
 
-            local ut = tc:FindFirstChild("UpperTorso")
+            local ut = tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart")
             if ut then
-                if not AutoKill.GunMethod.StompReturn then
-                    AutoKill.GunMethod.StompReturn = hrp.CFrame
-                end
                 hum.Sit = false
                 hum.PlatformStand = false
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+                -- Spoof local view with a clone so the player doesn't see the teleport.
+                if not AutoKill.SpoofClone.Model or AutoKill.SpoofClone.RealChar ~= c then
+                    AutoKill.CreateSpoofClone(c)
+                end
+
                 hrp.Velocity = Vector3.zero
                 hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, 3.5, 0))
                 RunService.RenderStepped:Wait()
                 for _ = 1, 5 do
                     getgenv().MainEvent:FireServer("Stomp")
-                end
-                AutoKill.HideCharacter()
-                if AutoKill.GunMethod.StompReturn then
-                    hrp.CFrame = AutoKill.GunMethod.StompReturn
                 end
             end
             task.wait()
@@ -1533,19 +1703,11 @@ function AutoKill.AutoStomp(target)
         AutoKill.GunMethod.StompRunning = false
         AutoKill.GunMethod.StompTarget = nil
         AutoKill.GunMethod.StompReturn = nil
-        AutoKill.HideCharacter()
     end)
 end
 
 function AutoKill.StopAutoStomp()
     AutoKill.GunMethod.StompRunning = false
-    if AutoKill.GunMethod.StompReturn then
-        local c = LocalPlayer.Character
-        local hrp = c and c:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            hrp.CFrame = AutoKill.GunMethod.StompReturn
-        end
-    end
     AutoKill.GunMethod.StompTarget = nil
     AutoKill.GunMethod.StompReturn = nil
 end
@@ -1653,6 +1815,7 @@ function AutoKill.StartCombatCycle()
                     AutoKill.GunMethod.IsKilling = false
                     AutoKill.UpdateUI("waiting")
                     AutoKill.HideCharacter()
+                    AutoKill.DestroySpoofClone()
                     task.wait(0.1)
                     continue
                 end
@@ -1667,6 +1830,7 @@ function AutoKill.StartCombatCycle()
                 AutoKill.GunMethod.IsKilling = false
                 AutoKill.UpdateUI("hiding_kill", targetName)
                 AutoKill.HideCharacter()
+                AutoKill.DestroySpoofClone()
                 task.wait(0.1)
                 AutoKill.KeepHidden()
                 continue
@@ -1759,6 +1923,7 @@ function AutoKill.StartCombatCycle()
                     end
                 else
                     AutoKill.KnifeAttackStep(target)
+                    AutoKill.UpdateSpoofClone()
                     RunService.Heartbeat:Wait()
                 end
             else
@@ -1766,6 +1931,7 @@ function AutoKill.StartCombatCycle()
                 AutoKill.GunMethod.IsWaiting = true
                 AutoKill.GunMethod.IsKilling = false
                 AutoKill.Target = nil
+                AutoKill.DestroySpoofClone()
                 task.wait(0.05)
             end
         end
@@ -1774,6 +1940,7 @@ function AutoKill.StartCombatCycle()
         AutoKill.GunMethod.IsKilling = false
         AutoKill.StopAutoStomp()
         AutoKill.UnhideCharacter()
+        AutoKill.DestroySpoofClone()
         AutoKill.RemoveVoidPlatform()
         AutoKill.UpdateUI("off")
     end)
@@ -1787,6 +1954,7 @@ function AutoKill.StopCycle()
     AutoKill.GunMethod.IsKilling = false
     AutoKill.StopAutoStomp()
     AutoKill.UnhideCharacter()
+    AutoKill.DestroySpoofClone()
     AutoKill.RemoveVoidPlatform()
     if getgenv().ForceHit then
         getgenv().ForceHit.Enabled = AutoKill.ForceHitWasEnabled or false
