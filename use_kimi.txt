@@ -962,7 +962,7 @@ local AutoKill = {
     LockedOn = false,
     CycleActive = false,
     LastStabTime = 0,
-    KnifeExpander = {Enabled = true, Size = 60},
+    KnifeExpander = {Enabled = true, Size = 120},
     KnifeAura = true,
     FastKnife = true,
     AuraLockedTarget = nil,
@@ -1147,7 +1147,8 @@ function AutoKill.KnifeAuraStep()
     if scriptObj then
         local can1 = scriptObj:FindFirstChild("CanHitPlayer")
         local can2 = scriptObj:FindFirstChild("CanHitPlayer2")
-        if can1 then pcall(function() can1.Value = targetChar end) end
+        -- Some knife scripts expect the Player, others expect the Character; set both
+        if can1 then pcall(function() can1.Value = target end) end
         if can2 then pcall(function() can2.Value = targetChar end) end
     end
 
@@ -1258,8 +1259,9 @@ RunService.Heartbeat:Connect(function()
             hitbox.Massless = true
             -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
             if AutoKill.KnifeAura then
-                hitbox.Size = Vector3.new(1, 1, 1)
-                task.defer(function()
+                hitbox.Size = Vector3.new(0.1, 0.1, 0.1)
+                task.spawn(function()
+                    RunService.Heartbeat:Wait()
                     hitbox.Size = Vector3.new(sz, sz, sz)
                 end)
             else
@@ -1856,8 +1858,8 @@ CombatAutoKill:AddToggle('AutoKillKnifeExpander', {
 CombatAutoKill:AddSlider('AutoKillKnifeSize', {
     Text = "Knife Hitbox Size",
     Min = 5,
-    Max = 100,
-    Default = 60,
+    Max = 200,
+    Default = 120,
     Rounding = 1,
     Callback = function(Value)
         AutoKill.KnifeExpander.Size = Value
