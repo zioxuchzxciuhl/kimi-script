@@ -965,6 +965,7 @@ local AutoKill = {
     KnifeExpander = {Enabled = true, Size = 60},
     KnifeAura = true,
     FastKnife = true,
+    AuraLockedTarget = nil,
     KnifeLoopConnection = nil,
     GunMethod = {
         PlatformColor = Color3.fromRGB(255, 0, 255),
@@ -1066,8 +1067,8 @@ function AutoKill.GetNextValidTarget()
 end
 
 function AutoKill.AdvanceTarget()
-    if AutoKill.Method == "Knife" and AutoKill.KnifeAura and not AutoKill.HasSelectedTargets() then
-        AutoKill.Target = AutoKill.GetClosestTarget()
+    if AutoKill.Method == "Knife" and not AutoKill.HasSelectedTargets() then
+        AutoKill.Target = AutoKill.GetNearestTargetByDistance()
     else
         AutoKill.Target = AutoKill.GetNextValidTarget()
     end
@@ -1102,8 +1103,16 @@ function AutoKill.KnifeAuraStep()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return end
 
-    -- Pick and lock the nearest valid target by distance for the aura
-    local target = AutoKill.GetNearestTargetByDistance()
+    -- Pick and lock the Lock onto a target until they die/get downed so the UI doesn't flicker between nearby players
+    local target = AutoKill.AuraLockedTarget
+    if target and (not AutoKill.IsValidTarget(target) or AutoKill.GetTargetStatus(target) ~= "alive") then
+        target = nil
+        AutoKill.AuraLockedTarget = nil
+    end
+    if not target then
+        target = AutoKill.GetNearestTargetByDistance()
+        AutoKill.AuraLockedTarget = target
+    end
     if not target then
         AutoKill.Target = nil
         AutoKill.UpdateUI("waiting")
@@ -1138,10 +1147,12 @@ function AutoKill.KnifeAuraStep()
     if hitbox then
         pcall(function()
             local sz = math.max(AutoKill.KnifeExpander.Enabled and AutoKill.KnifeExpander.Size or 60, 60)
-            hitbox.Size = Vector3.new(sz, sz, sz)
             hitbox.Transparency = 1
             hitbox.CanCollide = false
             hitbox.Massless = true
+            -- Pulse the hitbox so the .Touched event refires for targets already inside the aura
+            hitbox.Size = Vector3.new(1, 1, 1)
+            hitbox.Size = Vector3.new(sz, sz, sz)
         end)
     end
 
@@ -1149,67 +1160,8 @@ function AutoKill.KnifeAuraStep()
 end
 
 function AutoKill.KnifeAttackStep(target)
-    if AutoKill.KnifeAura then
-        AutoKill.KnifeAuraStep()
-        return
-    end
-    if not target or not target.Character then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local targetChar = target.Character
-    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then return end
-
-    AutoKill.OwnPart(root)
-    AutoKill.OwnPart(targetRoot)
-
-    -- Make sure knife is out
-    local knifeTool = char:FindFirstChild("[Knife]")
-    if not knifeTool then
-        AutoKill.TryEquipKnife()
-        knifeTool = char:FindFirstChild("[Knife]")
-    end
-
-    -- Tell the knife it can hit this target
-    if knifeTool then
-        local scriptObj = knifeTool:FindFirstChild("Script")
-        if scriptObj then
-            local can1 = scriptObj:FindFirstChild("CanHitPlayer")
-            local can2 = scriptObj:FindFirstChild("CanHitPlayer2")
-            if can1 then pcall(function() can1.Value = targetChar end) end
-            if can2 then pcall(function() can2.Value = targetChar end) end
-        end
-        -- Keep hitbox large even if expander toggle is off
-        local handle = knifeTool:FindFirstChild("Handle")
-        local hitbox = handle and handle:FindFirstChild("HITBOX_PART")
-        if hitbox then
-            pcall(function()
-                local sz = math.max(AutoKill.KnifeExpander.Size, 15)
-                hitbox.Size = Vector3.new(sz, sz, sz)
-                hitbox.Transparency = 1
-                hitbox.CanCollide = false
-                hitbox.Massless = true
-            end)
-        end
-    end
-
-    pcall(function()
-        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
-        local offset, lookAt = AutoKill.GetAttachOffset()
-        local targetCF = targetRoot.CFrame
-        if not lookAt then
-            root.CFrame = targetCF
-        else
-            local attachCF = targetCF * offset
-            root.CFrame = CFrame.lookAt(attachCF.Position, targetCF.Position)
-        end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-    end)
-
-    AutoKill.TryStab()
+    -- Aura-only: no teleport, no attach offset; hitbox + stab handles nearby targets
+    AutoKill.KnifeAuraStep()
 end
 
 function AutoKill.IsValidPlayer(player)
@@ -1591,7 +1543,7 @@ function AutoKill.GetNearestTargetByDistance()
     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
     for _, player in ipairs(Players:GetPlayers()) do
-        if AutoKill.IsValidTarget(player) then
+        if AutoKill.IsValidTarget(player) and AutoKill.GetTargetStatus(player) == "alive" then
             local root = player.Character:FindFirstChild("HumanoidRootPart")
             local dist = (root.Position - myRoot.Position).Magnitude
             if dist < minDist then
@@ -1784,6 +1736,7 @@ end
 function AutoKill.StopCycle()
     AutoKill.LockedOn = false
     AutoKill.CycleActive = false
+    AutoKill.AuraLockedTarget = nil
     AutoKill.GunMethod.IsWaiting = false
     AutoKill.GunMethod.IsKilling = false
     AutoKill.StopAutoStomp()
@@ -1810,7 +1763,8 @@ function AutoKill.StartCycle()
     if not AutoKill.Target then
         AutoKill.AdvanceTarget()
     end
-    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
+    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby
+    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
         return
     end
     AutoKill.LockedOn = true
@@ -1840,18 +1794,6 @@ CombatAutoKill:AddDropdown('AutoKillMethod', {
         AutoKill.Method = Value
         AutoKill.StopCycle()
         if AutoKill.Enabled and (AutoKill.Target or AutoKill.HasSelectedTargets() or (Value == "Knife" and AutoKill.KnifeAura)) then
-            AutoKill.StartCycle()
-        end
-    end
-})
-
-CombatAutoKill:AddToggle('AutoKillKnifeAura', {
-    Text = "Knife Aura",
-    Default = true,
-    Callback = function(Value)
-        AutoKill.KnifeAura = Value
-        AutoKill.StopCycle()
-        if AutoKill.Enabled and AutoKill.Method == "Knife" then
             AutoKill.StartCycle()
         end
     end
