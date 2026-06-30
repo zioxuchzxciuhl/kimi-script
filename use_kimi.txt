@@ -1197,12 +1197,29 @@ function AutoKill.KnifeAttackStep(target)
         end
     end
 
+    -- Spoof to the target's position like TargetAim auto-stomp does.
+    -- We move the HRP to the target for one frame so the server sees us there,
+    -- but we offset the camera back so the local player stays free.
     pcall(function()
-        -- Spoof our network position to the target's root without moving locally
-        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
-    end)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local originalCF = root.CFrame
+        local originalCamOffset = hum.CameraOffset
+        local originalVel = root.AssemblyLinearVelocity
+        local targetPos = targetRoot.CFrame.Position
 
-    AutoKill.TryStab()
+        root.CFrame = CFrame.new(targetPos)
+        hum.CameraOffset = originalCF.Position - targetPos
+        root.AssemblyLinearVelocity = Vector3.zero
+
+        RunService.RenderStepped:Wait()
+        AutoKill.TryStab()
+        RunService.RenderStepped:Wait()
+
+        hum.CameraOffset = originalCamOffset
+        root.CFrame = originalCF
+        root.AssemblyLinearVelocity = originalVel
+    end)
 end
 
 function AutoKill.IsValidPlayer(player)
@@ -1328,35 +1345,13 @@ function AutoKill.RemoveVoidPlatform()
 end
 
 function AutoKill.HideCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    AutoKill.CreateVoidPlatform()
-    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
-    root.CFrame = CFrame.new(platformPos)
-    root.Velocity = Vector3.new(0, 0, 0)
-    root.RotVelocity = Vector3.new(0, 0, 0)
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            if part:GetAttribute("AutoKill_OriginalLTM") == nil then
-                part:SetAttribute("AutoKill_OriginalLTM", part.LocalTransparencyModifier)
-            end
-            part.LocalTransparencyModifier = 1
-        end
-    end
+    -- No-op: we no longer teleport the local character to a void platform.
+    -- The player should stay free on their screen; server-side spoofing is handled separately.
     AutoKill.GunMethod.IsHiding = true
 end
 
 function AutoKill.KeepHidden()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
-    root.CFrame = CFrame.new(platformPos)
-    root.Velocity = Vector3.new(0, 0, 0)
-    root.RotVelocity = Vector3.new(0, 0, 0)
+    -- No-op: the local character stays where it is.
 end
 
 function AutoKill.UnhideCharacter()
