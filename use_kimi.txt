@@ -1947,7 +1947,9 @@ do
         OwnerName = "",
         OwnerPlayer = nil,
         FollowConnection = nil,
-        ChatConnection = nil
+        ChatConnection = nil,
+        IsVanished = false,
+        BringRunning = false,
     }
 
     local function findStandPlayer(name)
@@ -1973,6 +1975,55 @@ do
         return nil
     end
 
+    local function bringPlayerToOwner(target, owner)
+        if StandConfig.BringRunning then return end
+        StandConfig.BringRunning = true
+
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then
+            StandConfig.BringRunning = false
+            return
+        end
+
+        -- Knock the target first
+        AutoKill.Target = target
+        AutoKill.Enabled = true
+        AutoKill.StartCycle()
+
+        local timeout = tick() + 8
+        while tick() < timeout do
+            local tc = target.Character
+            local be = tc and tc:FindFirstChild("BodyEffects")
+            local ko = be and be:FindFirstChild("K.O")
+            local dead = be and be:FindFirstChild("Dead")
+            if (ko and ko.Value) or (dead and dead.Value) then
+                break
+            end
+            task.wait(0.1)
+        end
+
+        AutoKill.Enabled = false
+        AutoKill.Target = nil
+        AutoKill.StopCycle()
+
+        -- Try to teleport-drag the target to the owner
+        local tc = target.Character
+        local tRoot = tc and tc:FindFirstChild("HumanoidRootPart")
+        local oc = owner.Character
+        local oRoot = oc and oc:FindFirstChild("HumanoidRootPart")
+        if tRoot and oRoot then
+            for i = 1, 10 do
+                myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, 1.5)
+                task.wait(0.05)
+                myRoot.CFrame = oRoot.CFrame * CFrame.new(0, 0, 3)
+                task.wait(0.05)
+            end
+        end
+
+        StandConfig.BringRunning = false
+    end
+
     local function handleStandCommand(msg, sender)
         if sender ~= StandConfig.OwnerPlayer then return end
         local args = msg:split(" ")
@@ -1989,6 +2040,8 @@ do
             if not targetName then return end
             local target = findStandTarget(targetName)
             if target then
+                StandConfig.IsVanished = false
+                AutoKill.UnhideCharacter()
                 AutoKill.Target = target
                 AutoKill.Enabled = true
                 if Toggles.AutoKillEnabled then
@@ -2006,6 +2059,24 @@ do
                 AutoKill.Method = "Gun"
                 AutoKill.StopCycle()
                 if AutoKill.Enabled then AutoKill.StartCycle() end
+            end
+        elseif cmd == ".vanish" then
+            StandConfig.IsVanished = true
+            AutoKill.HideCharacter()
+        elseif cmd == ".unvanish" then
+            StandConfig.IsVanished = false
+            AutoKill.UnhideCharacter()
+        elseif cmd == ".bring" then
+            local targetName = args[2]
+            if not targetName then return end
+            local target = findStandTarget(targetName)
+            local owner = StandConfig.OwnerPlayer
+            if target and owner then
+                StandConfig.IsVanished = false
+                AutoKill.UnhideCharacter()
+                task.spawn(function()
+                    bringPlayerToOwner(target, owner)
+                end)
             end
         elseif cmd == ".stop" then
             AutoKill.Enabled = false
@@ -2035,6 +2106,8 @@ do
         if StandConfig.FollowConnection then return end
         StandConfig.FollowConnection = RunService.Heartbeat:Connect(function()
             if not StandConfig.Enabled then return end
+            if StandConfig.IsVanished then return end
+            if StandConfig.BringRunning then return end
             if AutoKill.Enabled and AutoKill.Target then return end
             if not StandConfig.OwnerPlayer then
                 StandConfig.OwnerPlayer = findStandPlayer(StandConfig.OwnerName)
@@ -2088,6 +2161,15 @@ do
             end
         end
     })
+
+    MiscUseStand:AddLabel('Commands:')
+    MiscUseStand:AddLabel('.godmode - toggle anim godmode')
+    MiscUseStand:AddLabel('.ak <user> - auto kill target')
+    MiscUseStand:AddLabel('.method knife / .method gun')
+    MiscUseStand:AddLabel('.vanish - hide on void platform')
+    MiscUseStand:AddLabel('.unvanish - leave void platform')
+    MiscUseStand:AddLabel('.bring <user> - bring player to owner')
+    MiscUseStand:AddLabel('.stop - stop auto kill')
 end
 
 function Library:targetui()
