@@ -1198,17 +1198,8 @@ function AutoKill.KnifeAttackStep(target)
     end
 
     pcall(function()
+        -- Spoof our network position to the target's root without moving locally
         sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
-        local offset, lookAt = AutoKill.GetAttachOffset()
-        local targetCF = targetRoot.CFrame
-        if not lookAt then
-            root.CFrame = targetCF
-        else
-            local attachCF = targetCF * offset
-            root.CFrame = CFrame.lookAt(attachCF.Position, targetCF.Position)
-        end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
     end)
 
     AutoKill.TryStab()
