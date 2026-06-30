@@ -1197,10 +1197,18 @@ function AutoKill.KnifeAttackStep(target)
         end
     end
 
-    -- Spoof the network root to the target so the server sees us on them,
-    -- while the local character stays free (no camera flicker).
     pcall(function()
         sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
+        local offset, lookAt = AutoKill.GetAttachOffset()
+        local targetCF = targetRoot.CFrame
+        if not lookAt then
+            root.CFrame = targetCF
+        else
+            local attachCF = targetCF * offset
+            root.CFrame = CFrame.lookAt(attachCF.Position, targetCF.Position)
+        end
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
     end)
 
     AutoKill.TryStab()
@@ -1329,13 +1337,35 @@ function AutoKill.RemoveVoidPlatform()
 end
 
 function AutoKill.HideCharacter()
-    -- No-op: we no longer teleport the local character to a void platform.
-    -- The player should stay free on their screen; server-side spoofing is handled separately.
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    AutoKill.CreateVoidPlatform()
+    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
+    root.CFrame = CFrame.new(platformPos)
+    root.Velocity = Vector3.new(0, 0, 0)
+    root.RotVelocity = Vector3.new(0, 0, 0)
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if part:GetAttribute("AutoKill_OriginalLTM") == nil then
+                part:SetAttribute("AutoKill_OriginalLTM", part.LocalTransparencyModifier)
+            end
+            part.LocalTransparencyModifier = 1
+        end
+    end
     AutoKill.GunMethod.IsHiding = true
 end
 
 function AutoKill.KeepHidden()
-    -- No-op: the local character stays where it is.
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local platformPos = AutoKill.GunMethod.VoidPosition + Vector3.new(0, 5, 0)
+    root.CFrame = CFrame.new(platformPos)
+    root.Velocity = Vector3.new(0, 0, 0)
+    root.RotVelocity = Vector3.new(0, 0, 0)
 end
 
 function AutoKill.UnhideCharacter()
@@ -1441,9 +1471,14 @@ function AutoKill.TeleportBehindTarget(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
     AutoKill.UnhideCharacter()
-    pcall(function()
-        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
-    end)
+    local offset, lookAt = AutoKill.GetAttachOffset()
+    if not lookAt then
+        root.CFrame = targetRoot.CFrame
+    else
+        local attachCF = targetRoot.CFrame * offset
+        root.CFrame = CFrame.lookAt(attachCF.Position, targetRoot.Position)
+    end
+    root.Velocity = Vector3.new(0, 0, 0)
 end
 
 function AutoKill.AutoStomp(target)
@@ -1468,20 +1503,29 @@ function AutoKill.AutoStomp(target)
             local dead = b and b:FindFirstChild("Dead")
 
             if not t or not ko or not ko.Value or (dead and dead.Value) then
+                if AutoKill.GunMethod.StompReturn then
+                    hrp.CFrame = AutoKill.GunMethod.StompReturn
+                end
                 break
             end
 
-            local ut = tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart")
+            local ut = tc:FindFirstChild("UpperTorso")
             if ut then
+                if not AutoKill.GunMethod.StompReturn then
+                    AutoKill.GunMethod.StompReturn = hrp.CFrame
+                end
                 hum.Sit = false
                 hum.PlatformStand = false
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                pcall(function()
-                    sethiddenproperty(hrp, "PhysicsRepRootPart", ut)
-                end)
+                hrp.Velocity = Vector3.zero
+                hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, 3.5, 0))
                 RunService.RenderStepped:Wait()
                 for _ = 1, 5 do
                     getgenv().MainEvent:FireServer("Stomp")
+                end
+                AutoKill.HideCharacter()
+                if AutoKill.GunMethod.StompReturn then
+                    hrp.CFrame = AutoKill.GunMethod.StompReturn
                 end
             end
             task.wait()
@@ -1489,11 +1533,19 @@ function AutoKill.AutoStomp(target)
         AutoKill.GunMethod.StompRunning = false
         AutoKill.GunMethod.StompTarget = nil
         AutoKill.GunMethod.StompReturn = nil
+        AutoKill.HideCharacter()
     end)
 end
 
 function AutoKill.StopAutoStomp()
     AutoKill.GunMethod.StompRunning = false
+    if AutoKill.GunMethod.StompReturn then
+        local c = LocalPlayer.Character
+        local hrp = c and c:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = AutoKill.GunMethod.StompReturn
+        end
+    end
     AutoKill.GunMethod.StompTarget = nil
     AutoKill.GunMethod.StompReturn = nil
 end
@@ -1757,7 +1809,8 @@ function AutoKill.StartCycle()
     if not AutoKill.Target then
         AutoKill.AdvanceTarget()
     end
-    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
+    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby
+    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
         return
     end
     AutoKill.LockedOn = true
