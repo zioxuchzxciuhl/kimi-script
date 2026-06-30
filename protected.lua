@@ -503,7 +503,7 @@ local function playFrozenEmote()
     local anim = Instance.new("Animation")
     anim.AnimationId = AnimGodmode.EmoteId
     AnimGodmode.Track = hum:LoadAnimation(anim)
-    AnimGodmode.Track:Play(0, 1, 1)
+    AnimGodmode.Track:Play(0, 0, 1)
     AnimGodmode.Heartbeat = RunService.Heartbeat:Connect(function()
         if AnimGodmode.Track and AnimGodmode.Enabled then
             AnimGodmode.Track.TimePosition = AnimGodmode.FreezeTime
