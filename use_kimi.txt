@@ -1986,8 +1986,8 @@ do
             return
         end
 
-        -- Knock the target first
-        AutoKill.Target = target
+        -- Knock the target first using target list cycling
+        AutoKill.SetTargetList({target.Name})
         AutoKill.Enabled = true
         AutoKill.StartCycle()
 
@@ -2007,17 +2007,41 @@ do
         AutoKill.Target = nil
         AutoKill.StopCycle()
 
-        -- Try to teleport-drag the target to the owner
+        -- Move stand onto the knocked target and try common grab remotes
         local tc = target.Character
         local tRoot = tc and tc:FindFirstChild("HumanoidRootPart")
         local oc = owner.Character
         local oRoot = oc and oc:FindFirstChild("HumanoidRootPart")
         if tRoot and oRoot then
-            for i = 1, 10 do
-                myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, 1.5)
-                task.wait(0.05)
+            myRoot.CFrame = tRoot.CFrame * CFrame.new(0, 0, 1.5)
+            task.wait(0.1)
+
+            local mainEvent = ReplicatedStorage:FindFirstChild("MainEvent")
+            if mainEvent then
+                local grabAttempts = {
+                    {"Grabbing", true},
+                    {"Grab", target},
+                    {"Grab", target.Character},
+                    {"PickUp", target},
+                    {"PickUp", target.Character},
+                    {"Carry", target},
+                    {"Carry", target.Character},
+                }
+                for _, args in ipairs(grabAttempts) do
+                    pcall(function() mainEvent:FireServer(unpack(args)) end)
+                    task.wait(0.05)
+                end
+            end
+
+            -- Carry them to the owner
+            for i = 1, 15 do
                 myRoot.CFrame = oRoot.CFrame * CFrame.new(0, 0, 3)
                 task.wait(0.05)
+            end
+
+            -- Try to release/drop
+            if mainEvent then
+                pcall(function() mainEvent:FireServer("Grabbing", false) end)
             end
         end
 
@@ -2042,7 +2066,7 @@ do
             if target then
                 StandConfig.IsVanished = false
                 AutoKill.UnhideCharacter()
-                AutoKill.Target = target
+                AutoKill.SetTargetList({target.Name})
                 AutoKill.Enabled = true
                 if Toggles.AutoKillEnabled then
                     Toggles.AutoKillEnabled:SetValue(true)
