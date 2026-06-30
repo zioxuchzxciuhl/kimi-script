@@ -2019,13 +2019,17 @@ do
 
     local function startStand()
         if StandConfig.ChatConnection then return end
-        StandConfig.ChatConnection = Players.PlayerChatted:Connect(function(chatType, sender, msg)
+        local TextChatService = game:GetService("TextChatService")
+        StandConfig.ChatConnection = TextChatService.MessageReceived:Connect(function(msgObj)
             if not StandConfig.Enabled then return end
-            if sender == LocalPlayer then return end
+            local textSource = msgObj and msgObj.TextSource
+            if not textSource then return end
+            local sender = Players:GetPlayerByUserId(textSource.UserId)
+            if not sender or sender == LocalPlayer then return end
             if not StandConfig.OwnerPlayer then
                 StandConfig.OwnerPlayer = findStandPlayer(StandConfig.OwnerName)
             end
-            handleStandCommand(msg, sender)
+            handleStandCommand(msgObj.Text or "", sender)
         end)
 
         if StandConfig.FollowConnection then return end
