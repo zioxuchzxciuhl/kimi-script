@@ -1809,8 +1809,7 @@ function AutoKill.StartCycle()
     if not AutoKill.Target then
         AutoKill.AdvanceTarget()
     end
-    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby
-    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
+    -- Knife aura doesn't need a pre-selected target; it hits anyone nearby    if not AutoKill.Target and not (AutoKill.Method == "Knife" and AutoKill.KnifeAura) then
         return
     end
     AutoKill.LockedOn = true
