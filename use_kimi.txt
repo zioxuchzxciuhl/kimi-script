@@ -1199,14 +1199,16 @@ end
 
 -- Knife method helpers
 function AutoKill.TryEquipKnife()
-    local backpack = LocalPlayer.Backpack
-    for _, tool in ipairs(backpack:GetChildren()) do
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") and string.find(string.lower(tool.Name), "knife") then
-            local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
+            pcall(function()
                 humanoid:EquipTool(tool)
-                return true
-            end
+            end)
+            return char:FindFirstChild(tool.Name) ~= nil
         end
     end
     return false
@@ -1216,16 +1218,15 @@ function AutoKill.TryStab()
     if not AutoKill.FastKnife and tick() - AutoKill.LastStabTime < 0.05 then return end
     local char = LocalPlayer.Character
     if not char then return end
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") and string.find(string.lower(tool.Name), "knife") then
-            pcall(function()
-                tool:Activate()
-                AutoKill.LastStabTime = tick()
-            end)
-            return
-        end
+    local knife = char:FindFirstChild("[Knife]")
+    if not knife then
+        AutoKill.TryEquipKnife()
+        return
     end
-    AutoKill.TryEquipKnife()
+    pcall(function()
+        knife:Activate()
+        AutoKill.LastStabTime = tick()
+    end)
 end
 
 function AutoKill.OwnPart(part)
@@ -1255,14 +1256,8 @@ RunService.Heartbeat:Connect(function()
             hitbox.Transparency = 1
             hitbox.CanCollide = false
             hitbox.Massless = true
+            -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
             if AutoKill.KnifeAura then
-                -- Center the aura hitbox on the player so it reaches the locked target from any angle
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if root then
-                    hitbox.Anchored = true
-                    hitbox.CFrame = root.CFrame
-                end
-                -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
                 hitbox.Size = Vector3.new(1, 1, 1)
                 task.defer(function()
                     hitbox.Size = Vector3.new(sz, sz, sz)
