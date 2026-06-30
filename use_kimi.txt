@@ -1197,29 +1197,13 @@ function AutoKill.KnifeAttackStep(target)
         end
     end
 
-    -- Spoof to the target's position like TargetAim auto-stomp does.
-    -- We move the HRP to the target for one frame so the server sees us there,
-    -- but we offset the camera back so the local player stays free.
+    -- Spoof the network root to the target so the server sees us on them,
+    -- while the local character stays free (no camera flicker).
     pcall(function()
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        local originalCF = root.CFrame
-        local originalCamOffset = hum.CameraOffset
-        local originalVel = root.AssemblyLinearVelocity
-        local targetPos = targetRoot.CFrame.Position
-
-        root.CFrame = CFrame.new(targetPos)
-        hum.CameraOffset = originalCF.Position - targetPos
-        root.AssemblyLinearVelocity = Vector3.zero
-
-        RunService.RenderStepped:Wait()
-        AutoKill.TryStab()
-        RunService.RenderStepped:Wait()
-
-        hum.CameraOffset = originalCamOffset
-        root.CFrame = originalCF
-        root.AssemblyLinearVelocity = originalVel
+        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
     end)
+
+    AutoKill.TryStab()
 end
 
 function AutoKill.IsValidPlayer(player)
@@ -1457,14 +1441,9 @@ function AutoKill.TeleportBehindTarget(target)
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return end
     AutoKill.UnhideCharacter()
-    local offset, lookAt = AutoKill.GetAttachOffset()
-    if not lookAt then
-        root.CFrame = targetRoot.CFrame
-    else
-        local attachCF = targetRoot.CFrame * offset
-        root.CFrame = CFrame.lookAt(attachCF.Position, targetRoot.Position)
-    end
-    root.Velocity = Vector3.new(0, 0, 0)
+    pcall(function()
+        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
+    end)
 end
 
 function AutoKill.AutoStomp(target)
@@ -1489,29 +1468,20 @@ function AutoKill.AutoStomp(target)
             local dead = b and b:FindFirstChild("Dead")
 
             if not t or not ko or not ko.Value or (dead and dead.Value) then
-                if AutoKill.GunMethod.StompReturn then
-                    hrp.CFrame = AutoKill.GunMethod.StompReturn
-                end
                 break
             end
 
-            local ut = tc:FindFirstChild("UpperTorso")
+            local ut = tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart")
             if ut then
-                if not AutoKill.GunMethod.StompReturn then
-                    AutoKill.GunMethod.StompReturn = hrp.CFrame
-                end
                 hum.Sit = false
                 hum.PlatformStand = false
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                hrp.Velocity = Vector3.zero
-                hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, 3.5, 0))
+                pcall(function()
+                    sethiddenproperty(hrp, "PhysicsRepRootPart", ut)
+                end)
                 RunService.RenderStepped:Wait()
                 for _ = 1, 5 do
                     getgenv().MainEvent:FireServer("Stomp")
-                end
-                AutoKill.HideCharacter()
-                if AutoKill.GunMethod.StompReturn then
-                    hrp.CFrame = AutoKill.GunMethod.StompReturn
                 end
             end
             task.wait()
@@ -1519,19 +1489,11 @@ function AutoKill.AutoStomp(target)
         AutoKill.GunMethod.StompRunning = false
         AutoKill.GunMethod.StompTarget = nil
         AutoKill.GunMethod.StompReturn = nil
-        AutoKill.HideCharacter()
     end)
 end
 
 function AutoKill.StopAutoStomp()
     AutoKill.GunMethod.StompRunning = false
-    if AutoKill.GunMethod.StompReturn then
-        local c = LocalPlayer.Character
-        local hrp = c and c:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            hrp.CFrame = AutoKill.GunMethod.StompReturn
-        end
-    end
     AutoKill.GunMethod.StompTarget = nil
     AutoKill.GunMethod.StompReturn = nil
 end
