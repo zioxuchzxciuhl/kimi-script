@@ -962,8 +962,8 @@ local AutoKill = {
     LockedOn = false,
     CycleActive = false,
     LastStabTime = 0,
-    KnifeExpander = {Enabled = true, Size = 120},
-    KnifeAura = true,
+    KnifeExpander = {Enabled = false, Size = 40},
+    KnifeAura = false,
     FastKnife = true,
     AuraLockedTarget = nil,
     KnifeLoopConnection = nil,
@@ -1067,8 +1067,8 @@ function AutoKill.GetNextValidTarget()
 end
 
 function AutoKill.AdvanceTarget()
-    if AutoKill.Method == "Knife" and not AutoKill.HasSelectedTargets() then
-        AutoKill.Target = AutoKill.GetNearestTargetByDistance()
+    if AutoKill.Method == "Knife" and AutoKill.KnifeAura and not AutoKill.HasSelectedTargets() then
+        AutoKill.Target = AutoKill.GetClosestTarget()
     else
         AutoKill.Target = AutoKill.GetNextValidTarget()
     end
@@ -1142,13 +1142,12 @@ function AutoKill.KnifeAuraStep()
     end
     if not knifeTool then return end
 
-    -- Aim the knife script at the locked target
+    -- Aim the knife script at the locked target (working knife expects the Character model)
     local scriptObj = knifeTool:FindFirstChild("Script")
     if scriptObj then
         local can1 = scriptObj:FindFirstChild("CanHitPlayer")
         local can2 = scriptObj:FindFirstChild("CanHitPlayer2")
-        -- Some knife scripts expect the Player, others expect the Character; set both
-        if can1 then pcall(function() can1.Value = target end) end
+        if can1 then pcall(function() can1.Value = targetChar end) end
         if can2 then pcall(function() can2.Value = targetChar end) end
     end
 
@@ -1156,8 +1155,65 @@ function AutoKill.KnifeAuraStep()
 end
 
 function AutoKill.KnifeAttackStep(target)
-    -- Aura-only: no teleport, no attach offset; hitbox + stab handles nearby targets
-    AutoKill.KnifeAuraStep()
+    if AutoKill.KnifeAura then
+        AutoKill.KnifeAuraStep()
+        return
+    end
+
+    if not target or not target.Character then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local targetChar = target.Character
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return end
+
+    AutoKill.OwnPart(root)
+    AutoKill.OwnPart(targetRoot)
+
+    local knifeTool = char:FindFirstChild("[Knife]")
+    if not knifeTool then
+        AutoKill.TryEquipKnife()
+        knifeTool = char:FindFirstChild("[Knife]")
+    end
+
+    if knifeTool then
+        local scriptObj = knifeTool:FindFirstChild("Script")
+        if scriptObj then
+            local can1 = scriptObj:FindFirstChild("CanHitPlayer")
+            local can2 = scriptObj:FindFirstChild("CanHitPlayer2")
+            if can1 then pcall(function() can1.Value = targetChar end) end
+            if can2 then pcall(function() can2.Value = targetChar end) end
+        end
+        local handle = knifeTool:FindFirstChild("Handle")
+        local hitbox = handle and handle:FindFirstChild("HITBOX_PART")
+        if hitbox then
+            pcall(function()
+                local sz = math.max(AutoKill.KnifeExpander.Size, 15)
+                hitbox.Size = Vector3.new(sz, sz, sz)
+                hitbox.Transparency = 1
+                hitbox.CanCollide = false
+                hitbox.Massless = true
+            end)
+        end
+    end
+
+    pcall(function()
+        sethiddenproperty(root, "PhysicsRepRootPart", targetRoot)
+        local offset, lookAt = AutoKill.GetAttachOffset()
+        local targetCF = targetRoot.CFrame
+        if not lookAt then
+            root.CFrame = targetCF
+        else
+            local attachCF = targetCF * offset
+            root.CFrame = CFrame.lookAt(attachCF.Position, targetCF.Position)
+        end
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end)
+
+    AutoKill.TryStab()
 end
 
 function AutoKill.IsValidPlayer(player)
@@ -1240,7 +1296,7 @@ end
 
 -- Knife hitbox expander
 RunService.Heartbeat:Connect(function()
-    if not AutoKill.KnifeExpander.Enabled and not AutoKill.KnifeAura then return end
+    if not AutoKill.KnifeExpander.Enabled then return end
     local char = LocalPlayer.Character
     if not char then return end
     local knife = char:FindFirstChild("[Knife]") or LocalPlayer.Backpack:FindFirstChild("[Knife]")
@@ -1251,22 +1307,10 @@ RunService.Heartbeat:Connect(function()
     if hitbox then
         pcall(function()
             local sz = AutoKill.KnifeExpander.Size
-            if AutoKill.KnifeAura then
-                sz = math.max(sz, 60)
-            end
+            hitbox.Size = Vector3.new(sz, sz, sz)
             hitbox.Transparency = 1
             hitbox.CanCollide = false
             hitbox.Massless = true
-            -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
-            if AutoKill.KnifeAura then
-                hitbox.Size = Vector3.new(0.1, 0.1, 0.1)
-                task.spawn(function()
-                    RunService.Heartbeat:Wait()
-                    hitbox.Size = Vector3.new(sz, sz, sz)
-                end)
-            else
-                hitbox.Size = Vector3.new(sz, sz, sz)
-            end
         end)
     end
 end)
@@ -1813,6 +1857,20 @@ CombatAutoKill:AddToggle('AutoKillFastKnife', {
     end
 })
 
+CombatAutoKill:AddToggle('AutoKillKnifeAura', {
+    Text = "Knife Aura",
+    Default = false,
+    Callback = function(Value)
+        AutoKill.KnifeAura = Value
+        AutoKill.AuraLockedTarget = nil
+        if AutoKill.Enabled and AutoKill.Method == "Knife" then
+            AutoKill.StopCycle()
+            AutoKill.AdvanceTarget()
+            AutoKill.StartCycle()
+        end
+    end
+})
+
 CombatAutoKill:AddDropdown('AutoKillAttachPosition', {
     Text = "Attach Position",
     Default = "Behind",
@@ -1849,7 +1907,7 @@ CombatAutoKill:AddDropdown('AutoKillManualTargets', {
 
 CombatAutoKill:AddToggle('AutoKillKnifeExpander', {
     Text = "Knife Hitbox Expander",
-    Default = true,
+    Default = false,
     Callback = function(Value)
         AutoKill.KnifeExpander.Enabled = Value
     end
@@ -1859,7 +1917,7 @@ CombatAutoKill:AddSlider('AutoKillKnifeSize', {
     Text = "Knife Hitbox Size",
     Min = 5,
     Max = 200,
-    Default = 120,
+    Default = 40,
     Rounding = 1,
     Callback = function(Value)
         AutoKill.KnifeExpander.Size = Value
