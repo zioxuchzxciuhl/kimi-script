@@ -346,6 +346,7 @@ local MiscAnimationPlayer = Tabs.Misc:AddLeftGroupbox('Animation Player')
 local MiscAutoFood = Tabs.Misc:AddRightGroupbox('Food')
 local MiscCombat = Tabs.Misc:AddRightGroupbox('Automation')
 local MiscOther = Tabs.Misc:AddRightGroupbox('Other')
+local MiscUseStand = Tabs.Misc:AddRightGroupbox('Use Stand')
 local MiscShootSounds = Tabs.Misc:AddRightGroupbox('Custom Shoot Sounds')
 
 local Players = game:GetService("Players")
@@ -1939,6 +1940,151 @@ CombatAutoKill:AddDropdown('AutoKillPlatformMaterial', {
         end
     end
 })
+
+do
+    local StandConfig = {
+        Enabled = false,
+        OwnerName = "",
+        OwnerPlayer = nil,
+        FollowConnection = nil,
+        ChatConnection = nil
+    }
+
+    local function findStandPlayer(name)
+        if not name or name == "" then return nil end
+        local lower = name:lower()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(lower, 1, true) or (p.DisplayName and p.DisplayName:lower():find(lower, 1, true)) then
+                return p
+            end
+        end
+        return nil
+    end
+
+    local function findStandTarget(name)
+        if not name or name == "" then return nil end
+        local lower = name:lower()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LocalPlayer then continue end
+            if p.Name:lower():find(lower, 1, true) or (p.DisplayName and p.DisplayName:lower():find(lower, 1, true)) then
+                return p
+            end
+        end
+        return nil
+    end
+
+    local function handleStandCommand(msg, sender)
+        if sender ~= StandConfig.OwnerPlayer then return end
+        local args = msg:split(" ")
+        local cmd = args[1] and args[1]:lower()
+        if not cmd then return end
+
+        if cmd == ".godmode" then
+            if getgenv().AnimGodmode then
+                local enabled = not getgenv().AnimGodmode.IsEnabled()
+                getgenv().AnimGodmode.Set(enabled)
+            end
+        elseif cmd == ".ak" then
+            local targetName = args[2]
+            if not targetName then return end
+            local target = findStandTarget(targetName)
+            if target then
+                AutoKill.Target = target
+                AutoKill.Enabled = true
+                if Toggles.AutoKillEnabled then
+                    Toggles.AutoKillEnabled:SetValue(true)
+                end
+                AutoKill.StartCycle()
+            end
+        elseif cmd == ".method" then
+            local method = args[2] and args[2]:lower()
+            if method == "knife" then
+                AutoKill.Method = "Knife"
+                AutoKill.StopCycle()
+                if AutoKill.Enabled then AutoKill.StartCycle() end
+            elseif method == "gun" then
+                AutoKill.Method = "Gun"
+                AutoKill.StopCycle()
+                if AutoKill.Enabled then AutoKill.StartCycle() end
+            end
+        elseif cmd == ".stop" then
+            AutoKill.Enabled = false
+            AutoKill.Target = nil
+            AutoKill.StopCycle()
+            if Toggles.AutoKillEnabled then
+                Toggles.AutoKillEnabled:SetValue(false)
+            end
+        end
+    end
+
+    local function startStand()
+        if StandConfig.ChatConnection then return end
+        StandConfig.ChatConnection = Players.PlayerChatted:Connect(function(chatType, sender, msg)
+            if not StandConfig.Enabled then return end
+            if sender == LocalPlayer then return end
+            if not StandConfig.OwnerPlayer then
+                StandConfig.OwnerPlayer = findStandPlayer(StandConfig.OwnerName)
+            end
+            handleStandCommand(msg, sender)
+        end)
+
+        if StandConfig.FollowConnection then return end
+        StandConfig.FollowConnection = RunService.Heartbeat:Connect(function()
+            if not StandConfig.Enabled then return end
+            if AutoKill.Enabled and AutoKill.Target then return end
+            if not StandConfig.OwnerPlayer then
+                StandConfig.OwnerPlayer = findStandPlayer(StandConfig.OwnerName)
+            end
+            local owner = StandConfig.OwnerPlayer
+            if not owner or not owner.Character then return end
+            local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            if not ownerRoot or not myRoot then return end
+            local behind = ownerRoot.CFrame * CFrame.new(0, 0, 5)
+            myRoot.CFrame = behind
+            myRoot.AssemblyLinearVelocity = Vector3.zero
+            myRoot.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
+
+    local function stopStand()
+        if StandConfig.ChatConnection then
+            StandConfig.ChatConnection:Disconnect()
+            StandConfig.ChatConnection = nil
+        end
+        if StandConfig.FollowConnection then
+            StandConfig.FollowConnection:Disconnect()
+            StandConfig.FollowConnection = nil
+        end
+    end
+
+    MiscUseStand:AddToggle('UseStandEnabled', {
+        Text = "Use Stand",
+        Default = false,
+        Callback = function(Value)
+            StandConfig.Enabled = Value
+            if Value then
+                local ownerName = (Options.UseStandOwner and Options.UseStandOwner.Value) or StandConfig.OwnerName
+                StandConfig.OwnerPlayer = findStandPlayer(ownerName)
+                startStand()
+            else
+                stopStand()
+            end
+        end
+    })
+
+    MiscUseStand:AddInput('UseStandOwner', {
+        Text = "Owner / Main Account",
+        Default = "",
+        Callback = function(Value)
+            StandConfig.OwnerName = Value
+            if StandConfig.Enabled then
+                StandConfig.OwnerPlayer = findStandPlayer(Value)
+            end
+        end
+    })
+end
 
 function Library:targetui()
     if Library._targetUIInstance then
