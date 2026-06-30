@@ -1255,8 +1255,14 @@ RunService.Heartbeat:Connect(function()
             hitbox.Transparency = 1
             hitbox.CanCollide = false
             hitbox.Massless = true
-            -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
             if AutoKill.KnifeAura then
+                -- Center the aura hitbox on the player so it reaches the locked target from any angle
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    hitbox.Anchored = true
+                    hitbox.CFrame = root.CFrame
+                end
+                -- Pulse the hitbox so the knife's .Touched event refires for overlapping targets
                 hitbox.Size = Vector3.new(1, 1, 1)
                 task.defer(function()
                     hitbox.Size = Vector3.new(sz, sz, sz)
