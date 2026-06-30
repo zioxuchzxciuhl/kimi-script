@@ -1,6 +1,7 @@
 -- protected.lua
 -- Sensitive exploit logic. Obfuscate THIS file with PolSec.
 -- Load this BEFORE the main UI script via loader.lua.
+print("d")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
