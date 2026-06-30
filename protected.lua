@@ -1,7 +1,7 @@
 -- protected.lua
 -- Sensitive exploit logic. Obfuscate THIS file with PolSec.
 -- Load this BEFORE the main UI script via loader.lua.
-print("test")
+print("ll")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -470,209 +470,8 @@ local AnimGodmode = {
     FreezeTime = 0.1265,
     Track = nil,
     Heartbeat = nil,
-    Connection = nil,
-    CloneModel = nil,
-    CloneRenderConnection = nil,
-    RealTransparency = {},
-    IdleAnimId = "rbxassetid://507766666",
-    WalkAnimId = "rbxassetid://507777623",
-    IdleTrack = nil,
-    WalkTrack = nil
+    Connection = nil
 }
-
-local function cleanupLocalClone()
-    if AnimGodmode.CloneRenderConnection then
-        AnimGodmode.CloneRenderConnection:Disconnect()
-        AnimGodmode.CloneRenderConnection = nil
-    end
-    if AnimGodmode.CloneModel then
-        pcall(function()
-            AnimGodmode.CloneModel:Destroy()
-        end)
-        AnimGodmode.CloneModel = nil
-    end
-    AnimGodmode.IdleTrack = nil
-    AnimGodmode.WalkTrack = nil
-
-    -- Restore real character local visibility
-    local char = LocalPlayer.Character
-    if char then
-        for part, original in pairs(AnimGodmode.RealTransparency) do
-            if part and part.Parent then
-                pcall(function()
-                    part.LocalTransparencyModifier = original
-                end)
-            end
-        end
-    end
-    AnimGodmode.RealTransparency = {}
-end
-
-local function createLocalClone(realChar)
-    cleanupLocalClone()
-    if not realChar then return end
-
-    -- Character is Archivable=false by default in most games; allow cloning
-    local oldArchivable = realChar.Archivable
-    realChar.Archivable = true
-    local clone = realChar:Clone()
-    realChar.Archivable = oldArchivable
-    if not clone then return end
-    clone.Name = "AnimGodmode_LocalClone"
-
-    -- Remove any logic/control objects; keep only visual parts
-    for _, obj in ipairs(clone:GetDescendants()) do
-        if obj:IsA("Script") or obj:IsA("LocalScript") then
-            obj:Destroy()
-        elseif obj:IsA("Tool") then
-            obj:Destroy()
-        elseif obj:IsA("BasePart") then
-            obj.CanCollide = false
-            obj.Anchored = false
-            obj.Transparency = 1
-            obj.LocalTransparencyModifier = -1
-        elseif obj:IsA("BillboardGui") then
-            obj.Enabled = false
-        end
-    end
-
-    -- Keep the Humanoid for animation, but force a neutral state
-    local cloneHum = clone:FindFirstChildOfClass("Humanoid")
-    if cloneHum then
-        cloneHum.AutoRotate = false
-        cloneHum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-        pcall(function()
-            cloneHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-        end)
-        cloneHum.DisplayName = ""
-    end
-
-    -- Reset Motor6D transforms so the clone starts from reference pose, not emote pose
-    for _, obj in ipairs(clone:GetDescendants()) do
-        if obj:IsA("Motor6D") then
-            obj.Transform = CFrame.new()
-        end
-    end
-
-    local cloneRoot = clone:FindFirstChild("HumanoidRootPart")
-    if cloneRoot then
-        cloneRoot.Anchored = false
-        cloneRoot.CanCollide = false
-        cloneRoot.Massless = true
-    end
-    for _, part in ipairs(clone:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.Massless = true
-        end
-    end
-
-    -- Use the Humanoid's Animator (or create one) for idle/walk animations
-    local animator = cloneHum and cloneHum:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator")
-        animator.Parent = cloneHum
-    end
-
-    -- Hide real character locally
-    AnimGodmode.RealTransparency = {}
-    for _, part in ipairs(realChar:GetDescendants()) do
-        if part:IsA("BasePart") then
-            AnimGodmode.RealTransparency[part] = part.LocalTransparencyModifier
-            part.LocalTransparencyModifier = 1
-        end
-    end
-
-    clone.Parent = workspace
-    AnimGodmode.CloneModel = clone
-
-    -- Grab the player's actual idle/walk animation IDs
-    local function getAnimId(animateObj, stateName)
-        if not animateObj then return nil end
-        local state = animateObj:FindFirstChild(stateName)
-        if not state then return nil end
-        local anim = state:FindFirstChildOfClass("Animation")
-        return anim and anim.AnimationId or nil
-    end
-    local realAnimate = realChar:FindFirstChild("Animate")
-    local idleId = getAnimId(realAnimate, "idle") or AnimGodmode.IdleAnimId
-    local walkId = getAnimId(realAnimate, "walk") or AnimGodmode.WalkAnimId
-
-    local idleAnim = Instance.new("Animation")
-    idleAnim.AnimationId = idleId
-    local walkAnim = Instance.new("Animation")
-    walkAnim.AnimationId = walkId
-
-    local ok1, idleTrack = pcall(function()
-        return animator:LoadAnimation(idleAnim)
-    end)
-    local ok2, walkTrack = pcall(function()
-        return animator:LoadAnimation(walkAnim)
-    end)
-
-    if ok1 and idleTrack then
-        idleTrack.Priority = Enum.AnimationPriority.Movement
-        idleTrack.Looped = true
-        idleTrack:Play(0.1, 1, 1)
-        AnimGodmode.IdleTrack = idleTrack
-    end
-    if ok2 and walkTrack then
-        walkTrack.Priority = Enum.AnimationPriority.Movement
-        walkTrack.Looped = true
-        AnimGodmode.WalkTrack = walkTrack
-    end
-
-    AnimGodmode.CloneRenderConnection = RunService.RenderStepped:Connect(function()
-        if not AnimGodmode.Enabled or not AnimGodmode.CloneModel then
-            cleanupLocalClone()
-            return
-        end
-        local currentChar = LocalPlayer.Character
-        if not currentChar or currentChar ~= realChar then
-            cleanupLocalClone()
-            return
-        end
-        local realRoot = currentChar:FindFirstChild("HumanoidRootPart")
-        local cRoot = AnimGodmode.CloneModel:FindFirstChild("HumanoidRootPart")
-        if not realRoot or not cRoot then return end
-
-        local realHum = currentChar:FindFirstChildOfClass("Humanoid")
-        local offset = realHum and realHum.HipHeight or 2
-        cRoot.CFrame = realRoot.CFrame + Vector3.new(0, offset, 0)
-
-        local cloneHum = AnimGodmode.CloneModel:FindFirstChildOfClass("Humanoid")
-        if cloneHum then
-            cloneHum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-        end
-
-        -- Keep real character hidden locally
-        for _, part in ipairs(currentChar:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if AnimGodmode.RealTransparency[part] == nil then
-                    AnimGodmode.RealTransparency[part] = part.LocalTransparencyModifier
-                end
-                part.LocalTransparencyModifier = 1
-            end
-        end
-
-        -- Swap idle/walk based on real movement
-        if realHum and AnimGodmode.IdleTrack and AnimGodmode.WalkTrack then
-            local isMoving = realHum.MoveDirection.Magnitude > 0.1
-            if isMoving then
-                if not AnimGodmode.WalkTrack.IsPlaying then
-                    AnimGodmode.IdleTrack:Stop(0.1)
-                    AnimGodmode.WalkTrack:Play(0.1, 1, math.max(0.1, realHum.WalkSpeed / 16))
-                end
-                AnimGodmode.WalkTrack:AdjustSpeed(math.max(0.1, realHum.WalkSpeed / 16))
-            else
-                if not AnimGodmode.IdleTrack.IsPlaying then
-                    AnimGodmode.WalkTrack:Stop(0.1)
-                    AnimGodmode.IdleTrack:Play(0.1, 1, 1)
-                end
-            end
-        end
-    end)
-end
 
 local function cleanupAnimGodmode()
     if AnimGodmode.Track then
@@ -688,7 +487,6 @@ local function cleanupAnimGodmode()
         AnimGodmode.Connection:Disconnect()
         AnimGodmode.Connection = nil
     end
-    cleanupLocalClone()
 end
 
 local function getGodmodeHumanoid()
@@ -703,10 +501,12 @@ local function playFrozenEmote()
     if not AnimGodmode.Enabled then return end
     cleanupAnimGodmode()
     local hum = getGodmodeHumanoid()
-    local char = LocalPlayer.Character
     local anim = Instance.new("Animation")
     anim.AnimationId = AnimGodmode.EmoteId
     AnimGodmode.Track = hum:LoadAnimation(anim)
+    -- Core priority + weight 1: the track is active and replicates server-side,
+    -- but default idle/walk animations (Movement priority) override it locally.
+    AnimGodmode.Track.Priority = Enum.AnimationPriority.Core
     AnimGodmode.Track:Play(0, 1, 1)
     AnimGodmode.Heartbeat = RunService.Heartbeat:Connect(function()
         if AnimGodmode.Track and AnimGodmode.Enabled then
@@ -719,9 +519,6 @@ local function playFrozenEmote()
             task.delay(0.02 + math.random() * 0.03, playFrozenEmote)
         end
     end)
-    if char then
-        createLocalClone(char)
-    end
 end
 
 function AnimGodmode.Enable()
