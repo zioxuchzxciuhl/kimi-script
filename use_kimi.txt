@@ -961,10 +961,8 @@ local AutoKill = {
     AttachPosition = "Behind",
     LockedOn = false,
     CycleActive = false,
-    LastStabTime = 0,
     KnifeExpander = {Enabled = false, Size = 40},
     KnifeAura = false,
-    FastKnife = true,
     AuraLockedTarget = nil,
     KnifeLoopConnection = nil,
     GunMethod = {
@@ -1272,7 +1270,6 @@ function AutoKill.TryEquipKnife()
 end
 
 function AutoKill.TryStab()
-    if not AutoKill.FastKnife and tick() - AutoKill.LastStabTime < 0.05 then return end
     local char = LocalPlayer.Character
     if not char then return end
     local knife = char:FindFirstChild("[Knife]")
@@ -1282,7 +1279,6 @@ function AutoKill.TryStab()
     end
     pcall(function()
         knife:Activate()
-        AutoKill.LastStabTime = tick()
     end)
 end
 
@@ -1846,14 +1842,6 @@ CombatAutoKill:AddDropdown('AutoKillMethod', {
         if AutoKill.Enabled and (AutoKill.Target or AutoKill.HasSelectedTargets() or (Value == "Knife" and AutoKill.KnifeAura)) then
             AutoKill.StartCycle()
         end
-    end
-})
-
-CombatAutoKill:AddToggle('AutoKillFastKnife', {
-    Text = "Fast Knife",
-    Default = true,
-    Callback = function(Value)
-        AutoKill.FastKnife = Value
     end
 })
 
